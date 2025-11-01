@@ -1,10 +1,9 @@
--- [ Darkteria ] Infinite Health + One Hit Kill + Stealth + Mobile GUI
+-- [ Darkteria ] Infinite Health + One Hit Kill + True Stealth + Monster ESP + Mobile GUI
 -- Работает в Delta, Arceus X, Hydrogen, Fluxus, Krnl
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -16,6 +15,9 @@ local InfiniteHealth = false
 local OneHitKill = false
 local StealthMode = false
 local SilentWalk = false
+local MonsterESP = false
+
+local espObjects = {}
 
 -- === БЕСКОНЕЧНОЕ ЗДОРОВЬЕ ===
 task.spawn(function()
@@ -42,88 +44,132 @@ local function applyOneHitKill()
 
     for _, tool in ipairs(tools) do
         local handle = tool:FindFirstChild("Handle")
-        if handle and not handle:FindFirstChild("OneHitConnection") then
-            local conn
-            conn = handle.Touched:Connect(function(hit)
-                if OneHitKill and conn.Connected then
+        if handle and not handle:FindFirstChild("OneHitTag") then
+            local conn = handle.Touched:Connect(function(hit)
+                if OneHitKill then
                     local enemyHum = hit.Parent:FindFirstChildOfClass("Humanoid")
                     if enemyHum and enemyHum ~= humanoid then
                         enemyHum:TakeDamage(999999)
                     end
                 end
             end)
-            conn.Name = "OneHitConnection"
+            conn.Name = "OneHitTag"
         end
     end
 end
 
--- === НЕВИДИМОСТЬ (Stealth Mode) ===
+-- === НЕВИДИМОСТЬ (True Stealth - без багов) ===
 local function applyStealth()
     if not StealthMode then return end
 
-    -- 1. Убираем ProximityPrompt (монстры не видят)
+    -- Только отключаем обнаружение, НЕ трогаем инвентарь
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("ProximityPrompt") then
             part.Enabled = false
         end
     end
 
-    -- 2. Отключаем коллизии с монстрами
-    for _, part in ipairs(character:GetChildren()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.Massless = true
-        end
-    end
-
-    -- 3. Убираем имя над головой (если есть)
+    -- Скрываем имя
     local head = character:FindFirstChild("Head")
     if head then
-        local nameTag = head:FindFirstChildWhichIsA("BillboardGui")
-        if nameTag then nameTag:Destroy() end
+        for _, gui in ipairs(head:GetChildren()) do
+            if gui:IsA("BillboardGui") then gui:Destroy() end
+        end
     end
 
-    -- 4. Отключаем AI Detection (если есть скрипты монстров)
-    pcall(function()
-        for _, monster in ipairs(Workspace:GetDescendants()) do
-            if monster:IsA("Model") and monster:FindFirstChild("Humanoid") then
-                local ai = monster:FindFirstChild("AI") or monster:FindFirstChild("Behavior")
-                if ai then ai:Destroy() end
+    -- Отключаем AI монстров (только их реакцию на игрока)
+    for _, model in ipairs(Workspace:GetDescendants()) do
+        if model:IsA("Model") and model:FindFirstChild("Humanoid") and model ~= character then
+            local ai = model:FindFirstChild("AI") or model:FindFirstChild("Behavior") or model:FindFirstChild("Script")
+            if ai and ai:IsA("LocalScript") or ai:IsA("Script") then
+                ai.Disabled = true
             end
         end
-    end)
+    end
 end
 
--- === НЕСЛЫШИМОСТЬ (Silent Walk) ===
+-- === НЕСЛЫШИМОСТЬ (Silent Walk - только звук) ===
 local function applySilentWalk()
     if not SilentWalk then return end
 
-    -- 1. Удаляем звуки шагов
+    -- Удаляем только звуки шагов
     for _, sound in ipairs(character:GetDescendants()) do
-        if sound:IsA("Sound") and (string.find(sound.Name, "Foot") or string.find(sound.Name, "Step")) then
+        if sound:IsA("Sound") and (string.find(string.lower(sound.Name), "foot") or string.find(string.lower(sound.Name), "step")) then
             sound.Volume = 0
-            sound.PlayOnRemove = false
             sound:Destroy()
         end
     end
 
-    -- 2. Блокируем создание новых звуков
+    -- Блокируем новые звуки шагов
     character.DescendantAdded:Connect(function(obj)
-        if SilentWalk and obj:IsA("Sound") and (string.find(obj.Name, "Foot") or string.find(obj.Name, "Step")) then
-            task.defer(function() obj:Destroy() end)
+        if SilentWalk and obj:IsA("Sound") and (string.find(string.lower(obj.Name), "foot") or string.find(string.lower(obj.Name), "step")) then
+            task.spawn(function()
+                task.wait()
+                if obj.Parent then obj:Destroy() end
+            end)
         end
     end)
+end
 
-    -- 3. Отключаем анимацию шагов (если есть)
-    if humanoid then
-        humanoid:FindFirstChildOfClass("Animator"):Destroy()
-        local anim = Instance.new("Animation")
-        anim.AnimationId = "rbxassetid://0"
-        humanoid:LoadAnimation(anim)
+-- === ESP ДЛЯ МОНСТРОВ ===
+local function addESP(model, text, color)
+    if espObjects[model] then return end
+    local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    if not part then return end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 100, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = model
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = color
+    label.TextStrokeTransparency = 0
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = billboard
+
+    espObjects[model] = billboard
+end
+
+local function removeESP(model)
+    if espObjects[model] then
+        espObjects[model]:Destroy()
+        espObjects[model] = nil
     end
 end
 
--- === ПРИМЕНЕНИЕ ПРИ РЕСПАВНЕ ===
+local function updateMonsterESP()
+    if not MonsterESP then
+        for model, _ in pairs(espObjects) do
+            removeESP(model)
+        end
+        return
+    end
+
+    for _, model in ipairs(Workspace:GetChildren()) do
+        if model:IsA("Model") and model:FindFirstChild("Humanoid") and model ~= character then
+            if not espObjects[model] then
+                addESP(model, "MONSTER", Color3.fromRGB(255, 0, 0))
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    while task.wait(1) do
+        if MonsterESP then
+            updateMonsterESP()
+        end
+    end
+end)
+
+-- === ПРИ РЕСПАВНЕ ===
 local function onCharacterAdded(char)
     character = char
     humanoid = char:WaitForChild("Humanoid")
@@ -134,20 +180,21 @@ local function onCharacterAdded(char)
     if OneHitKill then applyOneHitKill() end
     if StealthMode then applyStealth() end
     if SilentWalk then applySilentWalk() end
+    if MonsterESP then updateMonsterESP() end
 end
 
 player.CharacterAdded:Connect(onCharacterAdded)
 player.Backpack.ChildAdded:Connect(applyOneHitKill)
 
--- === GUI СОЗДАНИЕ ===
+-- === GUI ===
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DarkteriaHub"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 380, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -190, 0.5, -210)
+mainFrame.Size = UDim2.new(0, 380, 0, 520)
+mainFrame.Position = UDim2.new(0.5, -190, 0.5, -260)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
@@ -222,7 +269,6 @@ local function createToggle(text, default, callback)
     return frame
 end
 
--- === КНОПКА ===
 local function createButton(text, callback)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, 0, 0, 50)
@@ -236,20 +282,12 @@ local function createButton(text, callback)
     return btn
 end
 
--- === КНОПКИ В GUI ===
+-- === КНОПКИ ===
 createToggle("Infinite Health", false, function(v) InfiniteHealth = v end)
-createToggle("One Hit Kill", false, function(v)
-    OneHitKill = v
-    if v then applyOneHitKill() end
-end)
-createToggle("Stealth (Invisible)", false, function(v)
-    StealthMode = v
-    if v then applyStealth() end
-end)
-createToggle("Silent Walk (No Sound)", false, function(v)
-    SilentWalk = v
-    if v then applySilentWalk() end
-end)
+createToggle("One Hit Kill", false, function(v) OneHitKill = v; if v then applyOneHitKill() end end)
+createToggle("Stealth (Invisible)", false, function(v) StealthMode = v; if v then applyStealth() end end)
+createToggle("Silent Walk", false, function(v) SilentWalk = v; if v then applySilentWalk() end end)
+createToggle("Monster ESP", false, function(v) MonsterESP = v; if v then updateMonsterESP() end end)
 createButton("Rejoin Server", function()
     game:GetService("TeleportService"):Teleport(game.PlaceId, player)
 end)
@@ -258,8 +296,8 @@ end)
 local collapsed = false
 collapseBtn.MouseButton1Click:Connect(function()
     collapsed = not collapsed
-    local targetSize = collapsed and UDim2.new(0, 60, 0, 60) or UDim2.new(0, 380, 0, 420)
-    TweenService:Create(mainFrame, TweenInfo.new(0.3), {Size = targetSize}):Play()
+    local target = collapsed and UDim2.new(0, 60, 0, 60) or UDim2.new(0, 380, 0, 520)
+    TweenService:Create(mainFrame, TweenInfo.new(0.3), {Size = target}):Play()
     collapseBtn.Text = collapsed and "+" or "−"
     content.Visible = not collapsed
     title.Visible = not collapsed
@@ -287,4 +325,4 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
-print("Darkteria Hub загружен! Stealth + Silent Walk включены!")
+print("Darkteria Hub: True Stealth + ESP + No Bugs")
