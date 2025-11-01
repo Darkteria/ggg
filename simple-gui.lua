@@ -1,24 +1,105 @@
+-- Simple GEF GUI v2.0 (Mobile Optimized)
+-- Работает в Roblox на Android (Delta, Hydrogen, Arceus X и др.)
+
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+-- === ПАПКИ ===
+local gefFolder = Workspace:FindFirstChild("GEFs")
+local moneyFolder = Workspace:FindFirstChild("Pickups")
+
+-- === ПЕРЕМЕННЫЕ ===
 local texts = {}
 local textVisible = false
 local moneyTextVisible = false
-local lightingChangeActive = false
-local gefFolder = Workspace:FindFirstChild("GEFs")
-local moneyFolder = Workspace:FindFirstChild("Pickups")
-local miniGefTextColor = Color3.new(1, 1, 0)
-local moneyTextColor = Color3.new(0, 1, 0)
+local lightingActive = false
+local hurtboxRemoved = false
 
-local hurtboxRemovalStarted = false
+-- === ESP ФУНКЦИИ ===
+local function addESP(obj, text, color)
+    if texts[obj] then return end
+    local part = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
+    if not part then return end
 
--- === УТИЛИТЫ ===
-local function startHurtboxRemoval()
-    if hurtboxRemovalStarted then return end
-    hurtboxRemovalStarted = true
-    spawn(function()
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 120, 0, 60)
+    billboard.StudsOffset = Vector3.new(0, 4, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = obj
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = color
+    label.TextStrokeTransparency = 0
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = billboard
+
+    texts[obj] = billboard
+end
+
+local function removeESP(obj)
+    if texts[obj] then
+        texts[obj]:Destroy()
+        texts[obj] = nil
+    end
+end
+
+-- === ОСНОВНЫЕ ФУНКЦИИ ===
+local function toggleGEFsESP()
+    textVisible = not textVisible
+    if textVisible then
+        if gefFolder then
+            for _, gef in pairs(gefFolder:GetChildren()) do
+                if gef:IsA("Model") then
+                    addESP(gef, "Mini GEF", Color3.new(1, 1, 0))
+                end
+            end
+        end
+        local bigGEF = Workspace:FindFirstChild("GEF")
+        if bigGEF and bigGEF:IsA("Model") then
+            addESP(bigGEF, "GEF", Color3.new(1, 0, 0))
+        end
+    else
+        for obj, _ in pairs(texts) do
+            if obj.Name == "GEF" or (gefFolder and obj.Parent == gefFolder) then
+                removeESP(obj)
+            end
+        end
+    end
+end
+
+local function toggleMoneyESP()
+    moneyTextVisible = not moneyTextVisible
+    if moneyTextVisible and moneyFolder then
+        for _, money in pairs(moneyFolder:GetChildren()) do
+            if money.Name == "Money" then
+                addESP(money, "Money", Color3.new(0, 1, 0))
+            end
+        end
+    else
+        for obj, _ in pairs(texts) do
+            if obj.Name == "Money" then
+                removeESP(obj)
+            end
+        end
+    end
+end
+
+local function removeHurtboxes()
+    if hurtboxRemoved then return end
+    hurtboxRemoved = true
+    task.spawn(function()
         while true do
             if gefFolder then
                 for _, gef in pairs(gefFolder:GetChildren()) do
@@ -36,334 +117,187 @@ local function startHurtboxRemoval()
     end)
 end
 
-local function setToolDamage(toolName, damage)
-    for _, player in pairs(Players:GetPlayers()) do
-        local backpack = player:FindFirstChild("Backpack")
-        if backpack then
-            for _, item in pairs(backpack:GetChildren()) do
-                if item.Name == toolName then
-                    local damageValue = item:FindFirstChild("Damage")
-                    if not damageValue then
-                        damageValue = Instance.new("NumberValue")
-                        damageValue.Name = "Damage"
-                        damageValue.Parent = item
-                    end
-                    damageValue.Value = damage
-                end
-            end
+local function setInfiniteDamage(toolName)
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
+    for _, tool in pairs(backpack:GetChildren()) do
+        if tool.Name == toolName then
+            local damage = tool:FindFirstChild("Damage") or Instance.new("NumberValue", tool)
+            damage.Name = "Damage"
+            damage.Value = 99999
         end
     end
 end
 
-local function addTextToObject(obj, labelText, color)
-    local adorneePart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
-    if adorneePart and not texts[obj] then
-        local billboard = Instance.new("BillboardGui")
-        billboard.Adornee = adorneePart
-        billboard.Size = UDim2.new(0, 100, 0, 50)
-        billboard.StudsOffset = Vector3.new(0, 3, 0)
-        billboard.AlwaysOnTop = true
-        billboard.Parent = obj
-
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = labelText
-        label.TextColor3 = color
-        label.TextStrokeTransparency = 0
-        label.TextScaled = true
-        label.Parent = billboard
-
-        texts[obj] = billboard
+local function toggleDaylight()
+    lightingActive = not lightingActive
+    if lightingActive then
+        task.spawn(function()
+            while lightingActive do
+                Lighting.Ambient = Color3.fromRGB(100, 100, 100)
+                Lighting.Brightness = 3
+                Lighting.ClockTime = 12
+                Lighting.FogEnd = 10000
+                task.wait(2)
+            end
+        end)
     end
 end
 
-local function removeTextFromObject(obj)
-    if texts[obj] then
-        texts[obj]:Destroy()
-        texts[obj] = nil
-    end
-end
-
-local function toggleTextGEFs()
-    textVisible = not textVisible
-    if textVisible then
-        if gefFolder then
-            for _, gef in pairs(gefFolder:GetChildren()) do
-                if gef:IsA("Model") then
-                    addTextToObject(gef, "Mini GEF", miniGefTextColor)
-                end
-            end
-        end
-        local gef = Workspace:FindFirstChild("GEF")
-        if gef and gef:IsA("Model") then
-            addTextToObject(gef, "GEF", Color3.new(1, 0, 0))
-        end
-    else
-        for obj, gui in pairs(texts) do
-            if gui:FindFirstChild("TextLabel") and (gui.TextLabel.Text == "Mini GEF" or gui.TextLabel.Text == "GEF") then
-                removeTextFromObject(obj)
+local function teleportToNearestGEF()
+    if not gefFolder then return end
+    local closest = nil
+    local minDist = math.huge
+    for _, gef in pairs(gefFolder:GetChildren()) do
+        if gef:IsA("Model") and gef.PrimaryPart then
+            local dist = (gef.PrimaryPart.Position - humanoidRootPart.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                closest = gef
             end
         end
     end
-end
-
-local function toggleTextMoney()
-    moneyTextVisible = not moneyTextVisible
-    if moneyTextVisible and moneyFolder then
-        for _, money in pairs(moneyFolder:GetChildren()) do
-            if money.Name == "Money" then
-                addTextToObject(money, "Money", moneyTextColor)
-            end
-        end
-    else
-        for obj, gui in pairs(texts) do
-            if gui:FindFirstChild("TextLabel") and gui.TextLabel.Text == "Money" then
-                removeTextFromObject(obj)
-            end
-        end
+    if closest then
+        humanoidRootPart.CFrame = closest.PrimaryPart.CFrame
     end
 end
 
-local function autoAddTextToNewObjects()
+-- === АВТОДОБАВЛЕНИЕ НОВЫХ ОБЪЕКТОВ ===
+task.spawn(function()
     while true do
         task.wait(1)
         if textVisible and gefFolder then
             for _, gef in pairs(gefFolder:GetChildren()) do
                 if gef:IsA("Model") and not texts[gef] then
-                    addTextToObject(gef, "Mini GEF", miniGefTextColor)
+                    addESP(gef, "Mini GEF", Color3.new(1, 1, 0))
                 end
             end
-            local gef = Workspace:FindFirstChild("GEF")
-            if gef and gef:IsA("Model") and not texts[gef] then
-                addTextToObject(gef, "GEF", Color3.new(1, 0, 0))
+            local bigGEF = Workspace:FindFirstChild("GEF")
+            if bigGEF and not texts[bigGEF] then
+                addESP(bigGEF, "GEF", Color3.new(1, 0, 0))
             end
         end
         if moneyTextVisible and moneyFolder then
             for _, money in pairs(moneyFolder:GetChildren()) do
                 if money.Name == "Money" and not texts[money] then
-                    addTextToObject(money, "Money", moneyTextColor)
+                    addESP(money, "Money", Color3.new(0, 1, 0))
                 end
             end
         end
     end
+end)
+
+-- === СОЗДАНИЕ МОБИЛЬНОГО GUI ===
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MobileGEFGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 380, 0, 500)
+mainFrame.Position = UDim2.new(0.5, -190, 0.5, -250)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+
+-- Заголовок
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 50)
+title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+title.Text = "GEF GUI Mobile"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.Parent = mainFrame
+
+-- Кнопка сворачивания
+local collapseBtn = Instance.new("TextButton")
+collapseBtn.Size = UDim2.new(0, 40, 0, 40)
+collapseBtn.Position = UDim2.new(1, -45, 0, 5)
+collapseBtn.Text = "−"
+collapseBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+collapseBtn.TextColor3 = Color3.new(1, 1, 1)
+collapseBtn.Parent = mainFrame
+
+-- Контент
+local content = Instance.new("ScrollingFrame")
+content.Size = UDim2.new(1, -20, 1, -70)
+content.Position = UDim2.new(0, 10, 0, 60)
+content.BackgroundTransparency = 1
+content.ScrollBarThickness = 6
+content.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 10)
+layout.Parent = content
+
+-- Функция создания кнопки
+local function createButton(text, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 50)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 18
+    btn.Parent = content
+    btn.MouseButton1Click:Connect(callback)
+    return btn
 end
 
-spawn(autoAddTextToNewObjects)
+-- Кнопки
+createButton("Teleport to Nearest GEF", teleportToNearestGEF)
+createButton("No Damage", removeHurtboxes)
+createButton("Infinity Crowbar", function() setInfiniteDamage("Crowbar") end)
+createButton("Infinity Bat", function() setInfiniteDamage("Bat") end)
+createButton("GEFs ESP", toggleGEFsESP)
+createButton("Money ESP", toggleMoneyESP)
+createButton("Day Light", toggleDaylight)
 
-local function toggleLightingChange()
-    lightingChangeActive = not lightingChangeActive
-    if lightingChangeActive then
-        spawn(function()
-            while lightingChangeActive do
-                Lighting.Ambient = Color3.fromRGB(84, 84, 84)
-                Lighting.Brightness = 2
-                Lighting.ClockTime = 14
-                Lighting.FogEnd = 1000
-                Lighting.FogStart = 0
-                Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
-                task.wait(3)
-            end
-        end)
-    end
-end
-
-local function getNearestMiniGEF(player)
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil, nil end
-    local root = character.HumanoidRootPart
-    local closest, minDist = nil, math.huge
-    if gefFolder then
-        for _, gef in pairs(gefFolder:GetChildren()) do
-            if gef:IsA("Model") and gef.PrimaryPart then
-                local dist = (gef.PrimaryPart.Position - root.Position).Magnitude
-                if dist < minDist then
-                    minDist = dist
-                    closest = gef
-                end
-            end
-        end
-    end
-    return closest, minDist
-end
-
--- === СОЗДАНИЕ GUI ДЛЯ ИГРОКА ===
-local function createGUIForPlayer(player)
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "GEFGUI_Collapsible"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = player:WaitForChild("PlayerGui")
-
-    -- Главный контейнер
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 500, 0, 600)
-    mainFrame.Position = UDim2.new(0.5, -250, 0.5, -300)
-    mainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
-    mainFrame.BorderSizePixel = 2
-    mainFrame.BorderColor3 = Color3.new(0.3, 0.3, 0.3)
-    mainFrame.ClipsDescendants = true
-    mainFrame.Parent = screenGui
-
-    -- Заголовок
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -60, 0, 50)
-    title.Position = UDim2.new(0, 10, 0, 0)
-    title.Text = "Simple GEF GUI"
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.BackgroundTransparency = 1
-    title.Parent = mainFrame
-
-    local author = Instance.new("TextLabel")
-    author.Size = UDim2.new(0, 150, 0, 30)
-    author.Position = UDim2.new(0, 20, 0, 50)
-    author.Text = "by Gabriel"
-    author.TextColor3 = Color3.new(0.7, 0.7, 0.7)
-    author.Font = Enum.Font.Gotham
-    author.BackgroundTransparency = 1
-    author.Parent = mainFrame
-
-    -- Кнопка сворачивания
-    local collapseBtn = Instance.new("TextButton")
-    collapseBtn.Size = UDim2.new(0, 40, 0, 40)
-    collapseBtn.Position = UDim2.new(1, -50, 0, 5)
-    collapseBtn.Text = "−"
-    collapseBtn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-    collapseBtn.TextColor3 = Color3.new(1, 1, 1)
-    collapseBtn.Font = Enum.Font.GothamBold
-    collapseBtn.Parent = mainFrame
-
-    -- Свернутая кнопка
-    local collapsedBtn = Instance.new("TextButton")
-    collapsedBtn.Size = UDim2.new(0, 60, 0, 60)
-    collapsedBtn.Position = UDim2.new(0.5, -30, 0.1, 0)
-    collapsedBtn.Text = "☰\nMenu"
-    collapsedBtn.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
-    collapsedBtn.TextColor3 = Color3.new(1, 1, 1)
-    collapsedBtn.Font = Enum.Font.GothamBold
-    collapsedBtn.Visible = false
-    collapsedBtn.Parent = screenGui
-
-    -- Контент
-    local contentFrame = Instance.new("Frame")
-    contentFrame.Size = UDim2.new(1, -20, 1, -90)
-    contentFrame.Position = UDim2.new(0, 10, 0, 80)
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.Parent = mainFrame
-
-    local uiList = Instance.new("UIListLayout")
-    uiList.Padding = UDim.new(0, 8)
-    uiList.Parent = contentFrame
-
-    -- === КНОПКИ ===
-    local function createBtn(text, callback)
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, 0, 0, 40)
-        btn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-        btn.TextColor3 = Color3.new(1, 1, 1)
-        btn.Text = text
-        btn.Font = Enum.Font.Gotham
-        btn.Parent = contentFrame
-        btn.MouseButton1Click:Connect(callback)
-        return btn
-    end
-
-    local distanceLabel = Instance.new("TextLabel")
-    distanceLabel.Size = UDim2.new(1, 0, 0, 30)
-    distanceLabel.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
-    distanceLabel.Text = "Distance: ..."
-    distanceLabel.TextColor3 = Color3.new(1, 1, 1)
-    distanceLabel.Parent = contentFrame
-
-    createBtn("Teleport to Nearest GEF", function()
-        local gef, _ = getNearestMiniGEF(player)
-        if gef and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            player.Character.HumanoidRootPart.CFrame = gef.PrimaryPart.CFrame
-        end
-    end)
-
-    local noDmgBtn = createBtn("No Damage", function()
-        startHurtboxRemoval()
-        noDmgBtn.Text = "No Damage (ON)"
-        noDmgBtn.TextColor3 = Color3.new(0, 1, 0)
-    end)
-
-    createBtn("Infinity Crowbar Damage", function() spawn(function() setToolDamage("Crowbar", 1000) end) end)
-    createBtn("Infinity Bat Damage", function() spawn(function() setToolDamage("Bat", 1000) end) end)
-
-    local gefEspBtn = createBtn("GEFs ESP", function()
-        toggleTextGEFs()
-        gefEspBtn.Text = textVisible and "GEFs ESP (ON)" or "GEFs ESP"
-    end)
-
-    local moneyEspBtn = createBtn("Money ESP", function()
-        toggleTextMoney()
-        moneyEspBtn.Text = moneyTextVisible and "Money ESP (ON)" or "Money ESP"
-    end)
-
-    local lightBtn = createBtn("Day Light", function()
-        toggleLightingChange()
-        lightBtn.Text = lightingChangeActive and "Day Light (ON)" or "Day Light"
-    end)
-
-    -- Телепорт к предметам
-    local items = {
-        "Shotgun", "Handgun", "Hammer", "Lantern", "Shells",
-        "Soda", "Money", "Crowbar", "Food", "Bat", "Medkit", "GPS", "Bullets"
-    }
-    for _, itemName in ipairs(items) do
-        createBtn("Teleport to " .. itemName, function()
-            local folder = itemName == "Money" and moneyFolder or Workspace:FindFirstChild("Pickups")
-            local item = folder and folder:FindFirstChild(itemName)
-            if item and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                player.Character.HumanoidRootPart.CFrame = item.CFrame
-            end
-        end)
-    end
-
-    -- === СВОРАЧИВАНИЕ ===
-    local isCollapsed = false
-    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-
-    local function collapse()
-        isCollapsed = true
-        collapseBtn.Text = "+"
-        local tween = TweenService:Create(mainFrame, tweenInfo, {Size = UDim2.new(0, 60, 0, 60)})
-        tween:Play()
-        tween.Completed:Connect(function()
-            mainFrame.Visible = false
-            collapsedBtn.Visible = true
-        end)
-    end
-
-    local function expand()
-        isCollapsed = false
-        mainFrame.Visible = true
-        collapsedBtn.Visible = false
-        local tween = TweenService:Create(mainFrame, tweenInfo, {Size = UDim2.new(0, 500, 0, 600)})
-        tween:Play()
-        collapseBtn.Text = "−"
-    end
-
-    collapseBtn.MouseButton1Click:Connect(function()
-        if isCollapsed then expand() else collapse() end
-    end)
-
-    collapsedBtn.MouseButton1Click:Connect(expand)
-
-    -- === ОБНОВЛЕНИЕ РАССТОЯНИЯ ===
-    spawn(function()
-        while screenGui.Parent do
-            local _, dist = getNearestMiniGEF(player)
-            distanceLabel.Text = dist and string.format("Nearest GEF: %.1f m", dist) or "Nearest GEF: Not found"
-            task.wait(1)
+-- Телепорт к предметам
+local items = {"Shotgun", "Handgun", "Hammer", "Lantern", "Shells", "Soda", "Money", "Crowbar", "Food", "Bat", "Medkit", "GPS", "Bullets"}
+for _, name in ipairs(items) do
+    createButton("Teleport to " .. name, function()
+        local folder = name == "Money" and moneyFolder or Workspace:FindFirstChild("Pickups")
+        local item = folder and folder:FindFirstChild(name)
+        if item then
+            humanoidRootPart.CFrame = item.CFrame
         end
     end)
 end
 
--- Подключение игроков
-Players.PlayerAdded:Connect(createGUIForPlayer)
-for _, player in pairs(Players:GetPlayers()) do
-    task.spawn(createGUIForPlayer, player)
-end
+-- Сворачивание
+local collapsed = false
+collapseBtn.MouseButton1Click:Connect(function()
+    collapsed = not collapsed
+    local targetSize = collapsed and UDim2.new(0, 60, 0, 60) or UDim2.new(0, 380, 0, 500)
+    TweenService:Create(mainFrame, TweenInfo.new(0.3), {Size = targetSize}):Play()
+    collapseBtn.Text = collapsed and "+" or "−"
+end)
+
+-- Перетаскивание (опционально)
+local dragging = false
+local dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+print("Mobile GEF GUI загружен!")
