@@ -1,4 +1,4 @@
--- [ Darkteria ] FULL HACK: Noclip + True Stealth + ESP + Mobile GUI
+-- [ Darkteria ] FULL HACK: Noclip + True Stealth + ESP + Сворачивание GUI
 -- Работает в Delta, Arceus X, Hydrogen, Fluxus, Krnl
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -61,47 +61,30 @@ local function applyOneHitKill()
     end
 end
 
--- === НЕВИДИМОСТЬ (True Stealth — монстры НЕ реагируют) ===
+-- === НЕВИДИМОСТЬ (True Stealth) ===
 local function applyStealth(enable)
     StealthMode = enable
-
     for _, model in ipairs(Workspace:GetDescendants()) do
         if model:IsA("Model") and model:FindFirstChild("Humanoid") and model ~= character then
             local hum = model:FindFirstChildOfClass("Humanoid")
             if hum then
                 if enable then
-                    -- Отключаем AI: монстр не видит и не атакует
                     pcall(function()
                         for _, script in ipairs(model:GetDescendants()) do
-                            if script:IsA("LocalScript") or script:IsA("Script") then
-                                if string.find(script.Name, "AI") or string.find(script.Name, "Behavior") or string.find(script.Name, "Follow") then
-                                    script.Disabled = true
-                                end
+                            if (script:IsA("LocalScript") or script:IsA("Script")) and (string.find(script.Name, "AI") or string.find(script.Name, "Behavior") or string.find(script.Name, "Follow")) then
+                                script.Disabled = true
                             end
                         end
                     end)
-
-                    -- Убираем коллизию с игроком
                     for _, part in ipairs(model:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
-                    end
-
-                    -- Игнорируем игрока в ProximityPrompt
-                    for _, prompt in ipairs(model:GetDescendants()) do
-                        if prompt:IsA("ProximityPrompt") then
-                            prompt.Enabled = false
-                        end
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                        if part:IsA("ProximityPrompt") then part.Enabled = false end
                     end
                 else
-                    -- Восстанавливаем (насколько возможно)
                     pcall(function()
                         for _, script in ipairs(model:GetDescendants()) do
-                            if script:IsA("Script") or script:IsA("LocalScript") then
-                                if string.find(script.Name, "AI") or string.find(script.Name, "Behavior") then
-                                    script.Disabled = false
-                                end
+                            if (script:IsA("Script") or script:IsA("LocalScript")) and string.find(script.Name, "AI") then
+                                script.Disabled = false
                             end
                         end
                     end)
@@ -111,23 +94,19 @@ local function applyStealth(enable)
     end
 end
 
--- === НЕСЛЫШИМОСТЬ (Silent Walk) ===
+-- === НЕСЛЫШИМОСТЬ ===
 local function applySilentWalk(enable)
     SilentWalk = enable
     if not enable then return end
-
     for _, sound in ipairs(character:GetDescendants()) do
         if sound:IsA("Sound") and (string.find(string.lower(sound.Name), "foot") or string.find(string.lower(sound.Name), "step")) then
             sound.Volume = 0
             sound:Destroy()
         end
     end
-
     character.DescendantAdded:Connect(function(obj)
         if SilentWalk and obj:IsA("Sound") and (string.find(string.lower(obj.Name), "foot") or string.find(string.lower(obj.Name), "step")) then
-            task.defer(function()
-                if obj.Parent then obj:Destroy() end
-            end)
+            task.defer(function() if obj.Parent then obj:Destroy() end end)
         end
     end)
 end
@@ -135,26 +114,17 @@ end
 -- === NOCLIP ===
 local function toggleNoclip(enable)
     Noclip = enable
-    if noclipConnection then
-        noclipConnection:Disconnect()
-        noclipConnection = nil
-    end
-
+    if noclipConnection then noclipConnection:Disconnect() end
     if not enable then
         for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
+            if part:IsA("BasePart") then part.CanCollide = true end
         end
         return
     end
-
     noclipConnection = RunService.Stepped:Connect(function()
         if Noclip and character then
             for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
+                if part:IsA("BasePart") then part.CanCollide = false end
             end
         end
     end)
@@ -191,12 +161,9 @@ local function updateESP()
         espObjects = {}
         return
     end
-
     for _, model in ipairs(Workspace:GetChildren()) do
         if model:IsA("Model") and model:FindFirstChild("Humanoid") and model ~= character then
-            if not espObjects[model] then
-                addESP(model)
-            end
+            if not espObjects[model] then addESP(model) end
         end
     end
 end
@@ -212,7 +179,6 @@ local function onCharacterAdded(char)
     character = char
     humanoid = char:WaitForChild("Humanoid")
     humanoidRootPart = char:WaitForChild("HumanoidRootPart")
-
     task.wait(1)
     if InfiniteHealth then humanoid.Health = humanoid.MaxHealth end
     if OneHitKill then applyOneHitKill() end
@@ -230,6 +196,7 @@ screenGui.Name = "DarkteriaHub"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
+-- === ОСНОВНАЯ РАМКА ===
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 380, 0, 580)
 mainFrame.Position = UDim2.new(0.5, -190, 0.5, -290)
@@ -250,21 +217,23 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 20
 title.Parent = mainFrame
 
--- Сворачивание
+-- === КНОПКА СВОРАЧИВАНИЯ ===
 local collapseBtn = Instance.new("TextButton")
 collapseBtn.Size = UDim2.new(0, 40, 0, 40)
 collapseBtn.Position = UDim2.new(1, -45, 0, 5)
 collapseBtn.Text = "−"
 collapseBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 collapseBtn.TextColor3 = Color3.new(1, 1, 1)
+collapseBtn.Font = Enum.Font.GothamBold
 collapseBtn.Parent = mainFrame
 
--- Контент
+-- === КОНТЕНТ ===
 local content = Instance.new("ScrollingFrame")
 content.Size = UDim2.new(1, -20, 1, -70)
 content.Position = UDim2.new(0, 10, 0, 60)
 content.BackgroundTransparency = 1
 content.ScrollBarThickness = 6
+content.Visible = true
 content.Parent = mainFrame
 
 local layout = Instance.new("UIListLayout")
@@ -331,12 +300,15 @@ createButton("Rejoin Server", function()
     game:GetService("TeleportService"):Teleport(game.PlaceId, player)
 end)
 
--- === СВОРАЧИВАНИЕ ===
+-- === СВОРАЧИВАНИЕ GUI ===
 local collapsed = false
+local fullSize = UDim2.new(0, 380, 0, 580)
+local miniSize = UDim2.new(0, 60, 0, 60)
+
 collapseBtn.MouseButton1Click:Connect(function()
     collapsed = not collapsed
-    local target = collapsed and UDim2.new(0, 60, 0, 60) or UDim2.new(0, 380, 0, 580)
-    TweenService:Create(mainFrame, TweenInfo.new(0.3), {Size = target}):Play()
+    local targetSize = collapsed and miniSize or fullSize
+    TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Size = targetSize}):Play()
     collapseBtn.Text = collapsed and "+" or "−"
     content.Visible = not collapsed
     title.Visible = not collapsed
@@ -352,16 +324,18 @@ mainFrame.InputBegan:Connect(function(input)
         startPos = mainFrame.Position
     end
 end)
+
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
         local delta = input.Position - dragStart
         mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
+
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = false
     end
 end)
 
-print("Darkteria Hub: Noclip + True Stealth + ESP — ЗАГРУЖЕНО!")
+print("Darkteria Hub: Сворачивание + Noclip + Stealth — ГОТОВО!")
