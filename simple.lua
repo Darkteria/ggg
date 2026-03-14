@@ -1,12 +1,12 @@
--- [ Darkteria Hub ] Optimized for EXILED + Android Fix
--- Функции: Бессмертие, 1 Hit Kill, Попытка выдачи монет, Сворачиваемый GUI
+-- [ Darkteria Hub ] PC Mouse Support + Android Touch
+-- Управление: Мышь (ПК) / Тач (Android)
+-- Горячая клавиша: RightShift (Открыть/Закрыть меню)
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -23,6 +23,7 @@ local Settings = {
 local espObjects = {}
 local noclipConnection = nil
 local isGuiCollapsed = false
+local isGuiVisible = true
 
 -- === ФУНКЦИИ ЧИТОВ ===
 
@@ -30,7 +31,6 @@ local isGuiCollapsed = false
 task.spawn(function()
     while task.wait(0.1) do
         if Settings.InfiniteHealth and humanoid and humanoid.Parent then
-            -- Попытка установить здоровье (может сбрасываться сервером)
             pcall(function() humanoid.Health = humanoid.MaxHealth end)
         end
     end
@@ -45,7 +45,6 @@ local function connectOHK(tool)
             if Settings.OneHitKill then
                 local enemyHum = hit.Parent:FindFirstChildOfClass("Humanoid")
                 if enemyHum and enemyHum ~= humanoid then
-                    -- Попытка нанести урон (зависит от фильтрации игры)
                     pcall(function() enemyHum:TakeDamage(99999) end)
                 end
             end
@@ -70,7 +69,6 @@ character.ChildAdded:Connect(refreshOHK)
 -- 3. ПОПЫТКА ВЫДАЧИ МОНЕТ (80)
 local function setCoins(amount)
     local success = false
-    -- Поиск возможных значений валюты в Player или Leaderstats
     local leaderstats = player:FindFirstChild("leaderstats")
     if leaderstats then
         for _, stat in ipairs(leaderstats:GetChildren()) do
@@ -84,7 +82,6 @@ local function setCoins(amount)
         end
     end
     
-    -- Поиск в самом объекте игрока
     if not success then
         for _, v in ipairs(player:GetChildren()) do
             if (v:IsA("IntValue") or v:IsA("NumberValue")) and string.match(string.lower(v.Name), "coin") then
@@ -108,6 +105,7 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "DarkteriaGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 100
 ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Основной фрейм
@@ -118,7 +116,7 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Active = true
-MainFrame.Draggable = true -- Включаем встроенную драг-функцию для надежности
+MainFrame.Draggable = false -- Отключаем встроенный драг для кастомного
 MainFrame.Parent = ScreenGui
 
 -- Заголовок
@@ -150,7 +148,7 @@ local UIList = Instance.new("UIListLayout")
 UIList.Padding = UDim.new(0, 5)
 UIList.Parent = ContentFrame
 
--- Кнопка сворачивания (Внутри MainFrame, но поверх всего)
+-- Кнопка сворачивания
 local MinimizeBtn = Instance.new("TextButton")
 MinimizeBtn.Size = UDim2.new(0, 30, 0, 30)
 MinimizeBtn.Position = UDim2.new(1, -35, 0, 5)
@@ -184,7 +182,8 @@ local function notify(msg)
     end)
 end
 
--- Создание кнопок и тумблеров
+-- === СОЗДАНИЕ ЭЛЕМЕНТОВ С HOVER-ЭФФЕКТАМИ (МЫШЬ) ===
+
 local function createToggle(text, default, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, 0, 0, 40)
@@ -212,12 +211,23 @@ local function createToggle(text, default, callback)
     btn.Parent = frame
 
     local state = default
+    
+    -- === ПОДДЕРЖКА МЫШИ (HOVER) ===
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = state and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    end)
+    
+    -- Клик (Мышь + Тач)
     btn.MouseButton1Click:Connect(function()
         state = not state
         btn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
         btn.Text = state and "ON" or "OFF"
         callback(state)
     end)
+    
     return frame
 end
 
@@ -230,7 +240,18 @@ local function createButton(text, callback)
     btn.Font = Enum.Font.Gotham
     btn.TextSize = 16
     btn.Parent = ContentFrame
+    
+    -- === ПОДДЕРЖКА МЫШИ (HOVER) ===
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end)
+    
+    -- Клик (Мышь + Тач)
     btn.MouseButton1Click:Connect(callback)
+    
     return btn
 end
 
@@ -251,30 +272,35 @@ createButton("Получить 80 Монет", function()
     setCoins(Settings.CoinsAmount)
 end)
 
-createButton("Респawn Игрока", function()
+createButton("Респавн Игрока", function()
     pcall(function() character:BreakJoints() end)
 end)
 
 createButton("Телепорт в Спавн", function()
     if humanoidRootPart then
-        humanoidRootPart.CFrame = CFrame.new(0, 5, 0) -- Координаты спавна могут отличаться
+        humanoidRootPart.CFrame = CFrame.new(0, 5, 0)
     end
 end)
 
--- === ЛОГИКА СВОРАЧИВАНИЯ (FIX) ===
+-- === ЛОГИКА СВОРАЧИВАНИЯ ===
+MinimizeBtn.MouseEnter:Connect(function()
+    MinimizeBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+end)
+MinimizeBtn.MouseLeave:Connect(function()
+    MinimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+end)
+
 MinimizeBtn.MouseButton1Click:Connect(function()
     isGuiCollapsed = not isGuiCollapsed
     
     if isGuiCollapsed then
-        -- Сворачиваем
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            Size = UDim2.new(0, 350, 0, 40), -- Оставляем только заголовок
+            Size = UDim2.new(0, 350, 0, 40),
             Position = UDim2.new(0.5, -175, MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset)
         }):Play()
         ContentFrame.Visible = false
         MinimizeBtn.Text = "+"
     else
-        -- Разворачиваем
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
             Size = UDim2.new(0, 350, 0, 450),
             Position = UDim2.new(0.5, -175, 0.5, -225)
@@ -284,10 +310,17 @@ MinimizeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- === ИСПРАВЛЕНИЕ ДРАГ-СИСТЕМЫ (ANDROID + PC) ===
--- Встроенная MainFrame.Draggable = true обычно работает лучше на Android, 
--- но добавим ручную обработку для надежности с кнопкой сворачивания.
+-- === ГОРЯЧАЯ КЛАВИША (RightShift) ===
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end -- Не срабатывать если игрок печатает в чате
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        isGuiVisible = not isGuiVisible
+        ScreenGui.Enabled = isGuiVisible
+        notify(isGuiVisible and "Меню Открыто" or "Меню Скрыто")
+    end
+end)
 
+-- === УЛУЧШЕННЫЙ DRAG (МЫШЬ + ТАЧ) ===
 local dragging = false
 local dragInput, dragStart, startPos
 
@@ -301,8 +334,15 @@ end
 
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        -- Не драгать, если нажали на кнопку сворачивания
-        if UserInputService:GetMouseLocation().X >= MainFrame.AbsolutePosition.X + MainFrame.AbsoluteSize.X - 35 then return end
+        -- Проверка: не нажата ли кнопка сворачивания
+        local mousePos = UserInputService:GetMouseLocation()
+        local btnAbsPos = MinimizeBtn.AbsolutePosition
+        local btnAbsSize = MinimizeBtn.AbsoluteSize
+        
+        if mousePos.X >= btnAbsPos.X and mousePos.X <= btnAbsPos.X + btnAbsSize.X and
+           mousePos.Y >= btnAbsPos.Y and mousePos.Y <= btnAbsPos.Y + btnAbsSize.Y then
+            return -- Не драгать если кликнули на кнопку минимизации
+        end
         
         dragging = true
         dragStart = input.Position
@@ -328,4 +368,4 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-notify("Darkteria Hub Загружен!")
+notify("Darkteria Hub Загружен! (RightShift - Меню)")
