@@ -1,290 +1,221 @@
--- [ Darkteria ] FULL HACK + СВОРАЧИВАНИЕ GUI (ФИКС ДЛЯ ANDROID)
--- Работает в Delta, Arceus X, Hydrogen, Fluxus, Krnl
+-- [ Darkteria Hub ] Optimized for EXILED + Android Fix
+-- Функции: Бессмертие, 1 Hit Kill, Попытка выдачи монет, Сворачиваемый GUI
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
--- === ПЕРЕМЕННЫЕ ===
-local InfiniteHealth = false
-local OneHitKill = false
-local StealthMode = false
-local SilentWalk = false
-local MonsterESP = false
-local Noclip = false
+-- === НАСТРОЙКИ ===
+local Settings = {
+    InfiniteHealth = false,
+    OneHitKill = false,
+    CoinsAmount = 80
+}
 
 local espObjects = {}
 local noclipConnection = nil
+local isGuiCollapsed = false
 
--- === БЕСКОНЕЧНОЕ ЗДОРОВЬЕ ===
+-- === ФУНКЦИИ ЧИТОВ ===
+
+-- 1. БЕСКОНЕЧНОЕ ЗДОРОВЬЕ
 task.spawn(function()
-    while task.wait() do
-        if InfiniteHealth and humanoid and humanoid.Parent then
-            humanoid.Health = humanoid.MaxHealth
+    while task.wait(0.1) do
+        if Settings.InfiniteHealth and humanoid and humanoid.Parent then
+            -- Попытка установить здоровье (может сбрасываться сервером)
+            pcall(function() humanoid.Health = humanoid.MaxHealth end)
         end
     end
 end)
 
--- === УБИЙСТВО С ОДНОГО УДАРА ===
-local function applyOneHitKill()
-    if not OneHitKill then return end
+-- 2. УБИЙСТВО С 1 УДАРА (OHK)
+local function connectOHK(tool)
+    if not tool:IsA("Tool") then return end
+    local handle = tool:FindFirstChild("Handle")
+    if handle and not handle:FindFirstChild("OHK_Conn") then
+        local conn = handle.Touched:Connect(function(hit)
+            if Settings.OneHitKill then
+                local enemyHum = hit.Parent:FindFirstChildOfClass("Humanoid")
+                if enemyHum and enemyHum ~= humanoid then
+                    -- Попытка нанести урон (зависит от фильтрации игры)
+                    pcall(function() enemyHum:TakeDamage(99999) end)
+                end
+            end
+        end)
+        conn.Name = "OHK_Conn"
+    end
+end
+
+local function refreshOHK()
+    if not Settings.OneHitKill then return end
     local tools = {}
     local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") then table.insert(tools, tool) end
-        end
-    end
-    for _, tool in ipairs(character:GetChildren()) do
-        if tool:IsA("Tool") then table.insert(tools, tool) end
-    end
+    if backpack then for _, t in ipairs(backpack:GetChildren()) do if t:IsA("Tool") then table.insert(tools, t) end end end
+    for _, t in ipairs(character:GetChildren()) do if t:IsA("Tool") then table.insert(tools, t) end end
+    
+    for _, t in ipairs(tools) do connectOHK(t) end
+end
 
-    for _, tool in ipairs(tools) do
-        local handle = tool:FindFirstChild("Handle")
-        if handle and not handle:FindFirstChild("OHK") then
-            local conn = handle.Touched:Connect(function(hit)
-                if OneHitKill then
-                    local enemyHum = hit.Parent:FindFirstChildOfClass("Humanoid")
-                    if enemyHum and enemyHum ~= humanoid then
-                        enemyHum:TakeDamage(999999)
-                    end
+player.Backpack.ChildAdded:Connect(refreshOHK)
+character.ChildAdded:Connect(refreshOHK)
+
+-- 3. ПОПЫТКА ВЫДАЧИ МОНЕТ (80)
+local function setCoins(amount)
+    local success = false
+    -- Поиск возможных значений валюты в Player или Leaderstats
+    local leaderstats = player:FindFirstChild("leaderstats")
+    if leaderstats then
+        for _, stat in ipairs(leaderstats:GetChildren()) do
+            if string.match(string.lower(stat.Name), "coin") or string.match(string.lower(stat.Name), "cash") or string.match(string.lower(stat.Name), "money") then
+                if stat:IsA("IntValue") or stat:IsA("NumberValue") then
+                    pcall(function() stat.Value = amount end)
+                    success = true
+                    break
                 end
-            end)
-            conn.Name = "OHK"
-        end
-    end
-end
-
--- === НЕВИДИМОСТЬ (True Stealth) ===
-local function applyStealth(enable)
-    StealthMode = enable
-    for _, model in ipairs(Workspace:GetDescendants()) do
-        if model:IsA("Model") and model:FindFirstChild("Humanoid") and model ~= character then
-            if enable then
-                pcall(function()
-                    for _, script in ipairs(model:GetDescendants()) do
-                        if (script:IsA("Script") or script:IsA("LocalScript")) and (string.find(script.Name, "AI") or string.find(script.Name, "Behavior")) then
-                            script.Disabled = true
-                        end
-                    end
-                end)
-            else
-                pcall(function()
-                    for _, script in ipairs(model:GetDescendants()) do
-                        if (script:IsA("Script") or script:IsA("LocalScript")) and (string.find(script.Name, "AI") or string.find(script.Name, "Behavior")) then
-                            script.Disabled = false
-                        end
-                    end
-                end)
             end
         end
     end
-end
-
--- === НЕСЛЫШИМОСТЬ ===
-local function applySilentWalk(enable)
-    SilentWalk = enable
-    if not enable then return end
-    for _, sound in ipairs(character:GetDescendants()) do
-        if sound:IsA("Sound") and (string.find(string.lower(sound.Name), "foot") or string.find(string.lower(sound.Name), "step")) then
-            sound.Volume = 0
-            sound:Destroy()
-        end
-    end
-    character.DescendantAdded:Connect(function(obj)
-        if SilentWalk and obj:IsA("Sound") and (string.find(string.lower(obj.Name), "foot") or string.find(string.lower(obj.Name), "step")) then
-            task.defer(function() if obj.Parent then obj:Destroy() end end)
-        end
-    end)
-end
-
--- === NOCLIP ===
-local function toggleNoclip(enable)
-    Noclip = enable
-    if noclipConnection then noclipConnection:Disconnect() end
-    if not enable then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = true end
-        end
-        return
-    end
-    noclipConnection = RunService.Stepped:Connect(function()
-        if Noclip and character then
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = false end
+    
+    -- Поиск в самом объекте игрока
+    if not success then
+        for _, v in ipairs(player:GetChildren()) do
+            if (v:IsA("IntValue") or v:IsA("NumberValue")) and string.match(string.lower(v.Name), "coin") then
+                pcall(function() v.Value = amount end)
+                success = true
+                break
             end
         end
-    end)
-end
-
--- === ESP МОНСТРОВ ===
-local function addESP(model)
-    if espObjects[model] or not model.PrimaryPart then return end
-    local billboard = Instance.new("BillboardGui")
-    billboard.Adornee = model.PrimaryPart
-    billboard.Size = UDim2.new(0, 100, 0, 50)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Parent = model
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = "MONSTER"
-    label.TextColor3 = Color3.fromRGB(255, 0, 0)
-    label.TextStrokeTransparency = 0
-    label.TextScaled = true
-    label.Font = Enum.Font.GothamBold
-    label.Parent = billboard
-
-    espObjects[model] = billboard
-end
-
-local function updateESP()
-    if not MonsterESP then
-        for model, gui in pairs(espObjects) do
-            if gui and gui.Parent then gui:Destroy() end
-        end
-        espObjects = {}
-        return
     end
-    for _, model in ipairs(Workspace:GetChildren()) do
-        if model:IsA("Model") and model:FindFirstChild("Humanoid") and model ~= character then
-            if not espObjects[model] then addESP(model) end
-        end
+
+    if success then
+        notify("Монеты установлены: " .. amount)
+    else
+        notify("Ошибка: Валюта защищена сервером!")
     end
 end
 
-task.spawn(function()
-    while task.wait(1) do
-        if MonsterESP then updateESP() end
-    end
-end)
+-- === GUI СИСТЕМА ===
 
--- === РЕСПАВН ===
-local function onCharacterAdded(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    humanoidRootPart = char:WaitForChild("HumanoidRootPart")
-    task.wait(1)
-    if InfiniteHealth then humanoid.Health = humanoid.MaxHealth end
-    if OneHitKill then applyOneHitKill() end
-    if StealthMode then applyStealth(true) end
-    if SilentWalk then applySilentWalk(true) end
-    if Noclip then toggleNoclip(true) end
-end
-
-player.CharacterAdded:Connect(onCharacterAdded)
-player.Backpack.ChildAdded:Connect(applyOneHitKill)
-
--- === GUI ===
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "DarkteriaHub"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DarkteriaGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Основной фрейм
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 380, 0, 580)
-mainFrame.Position = UDim2.new(0.5, -190, 0.5, -290)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-mainFrame.BorderSizePixel = 0
-mainFrame.ClipsDescendants = true
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = screenGui
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 350, 0, 450)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Active = true
+MainFrame.Draggable = true -- Включаем встроенную драг-функцию для надежности
+MainFrame.Parent = ScreenGui
 
 -- Заголовок
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 50)
-title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-title.Text = "Darkteria Hub"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 20
-title.Parent = mainFrame
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
 
--- Контент
-local content = Instance.new("ScrollingFrame")
-content.Size = UDim2.new(1, -20, 1, -70)
-content.Position = UDim2.new(0, 10, 0, 60)
-content.BackgroundTransparency = 1
-content.ScrollBarThickness = 6
-content.Parent = mainFrame
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, 0, 1, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Darkteria Hub | EXILED"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 18
+TitleLabel.Parent = TitleBar
 
-local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 10)
-layout.Parent = content
+-- Контент (Скролл)
+local ContentFrame = Instance.new("ScrollingFrame")
+ContentFrame.Size = UDim2.new(1, -10, 1, -50)
+ContentFrame.Position = UDim2.new(0, 5, 0, 45)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.ScrollBarThickness = 5
+ContentFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
+ContentFrame.Parent = MainFrame
 
--- === КНОПКА СВОРАЧИВАНИЯ (ОТДЕЛЬНО ОТ mainFrame) ===
-local collapseContainer = Instance.new("Frame")
-collapseContainer.Size = UDim2.new(0, 50, 0, 50)
-collapseContainer.Position = UDim2.new(0, 0, 0, 0) -- Будет привязана к mainFrame
-collapseContainer.BackgroundTransparency = 1
-collapseContainer.Parent = screenGui
+local UIList = Instance.new("UIListLayout")
+UIList.Padding = UDim.new(0, 5)
+UIList.Parent = ContentFrame
 
-local collapseBtn = Instance.new("TextButton")
-collapseBtn.Size = UDim2.new(0, 40, 0, 40)
-collapseBtn.Position = UDim2.new(0, 5, 0, 5)
-collapseBtn.Text = "−"
-collapseBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-collapseBtn.BorderSizePixel = 2
-collapseBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
-collapseBtn.TextColor3 = Color3.new(1, 1, 1)
-collapseBtn.Font = Enum.Font.GothamBold
-collapseBtn.TextSize = 24
-collapseBtn.Parent = collapseContainer
+-- Кнопка сворачивания (Внутри MainFrame, но поверх всего)
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Size = UDim2.new(0, 30, 0, 30)
+MinimizeBtn.Position = UDim2.new(1, -35, 0, 5)
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+MinimizeBtn.Text = "-"
+MinimizeBtn.TextColor3 = Color3.new(1, 1, 1)
+MinimizeBtn.Font = Enum.Font.GothamBold
+MinimizeBtn.TextSize = 20
+MinimizeBtn.BorderSizePixel = 0
+MinimizeBtn.Parent = MainFrame
+MinimizeBtn.ZIndex = 10
 
--- Привязываем контейнер кнопки к правому верхнему углу mainFrame
-local function updateCollapseBtnPosition()
-    local absPos = mainFrame.AbsolutePosition
-    local absSize = mainFrame.AbsoluteSize
-    collapseContainer.Position = UDim2.new(0, absPos.X + absSize.X - 45, 0, absPos.Y + 5)
+-- Уведомления
+local function notify(msg)
+    local notif = Instance.new("TextLabel")
+    notif.Size = UDim2.new(0, 300, 0, 40)
+    notif.Position = UDim2.new(0.5, -150, 0, 100)
+    notif.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    notif.BackgroundTransparency = 0.3
+    notif.Text = msg
+    notif.TextColor3 = Color3.new(1, 1, 1)
+    notif.Font = Enum.Font.Gotham
+    notif.TextSize = 16
+    notif.Parent = ScreenGui
+    
+    TweenService:Create(notif, TweenInfo.new(2), {Position = UDim2.new(0.5, -150, 0, 50)}):Play()
+    task.delay(2.5, function()
+        TweenService:Create(notif, TweenInfo.new(0.5), {Transparency = 1}):Play()
+        task.wait(0.5)
+        notif:Destroy()
+    end)
 end
 
--- Обновляем позицию при перемещении и ресайзе
-mainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(updateCollapseBtnPosition)
-mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCollapseBtnPosition)
-RunService.Heartbeat:Connect(updateCollapseBtnPosition) -- На случай драга
-
--- === ТУМБЛЕР ===
+-- Создание кнопок и тумблеров
 local function createToggle(text, default, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 50)
-    frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    frame.Parent = content
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    frame.BorderSizePixel = 0
+    frame.Parent = ContentFrame
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Size = UDim2.new(0.65, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = text
     label.TextColor3 = Color3.new(1, 1, 1)
     label.Font = Enum.Font.Gotham
-    label.TextSize = 18
+    label.TextSize = 16
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
 
-    local toggle = Instance.new("TextButton")
-    toggle.Size = UDim2.new(0, 60, 0, 30)
-    toggle.Position = UDim2.new(1, -70, 0.5, -15)
-    toggle.BackgroundColor3 = default and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
-    toggle.Text = default and "ON" or "OFF"
-    toggle.TextColor3 = Color3.new(1, 1, 1)
-    toggle.Font = Enum.Font.GothamBold
-    toggle.Parent = frame
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 50, 0, 25)
+    btn.Position = UDim2.new(1, -55, 0.5, -12.5)
+    btn.BackgroundColor3 = default and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    btn.Text = default and "ON" or "OFF"
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = frame
 
     local state = default
-    toggle.MouseButton1Click:Connect(function()
+    btn.MouseButton1Click:Connect(function()
         state = not state
-        toggle.BackgroundColor3 = state and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
-        toggle.Text = state and "ON" or "OFF"
+        btn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+        btn.Text = state and "ON" or "OFF"
         callback(state)
     end)
     return frame
@@ -292,69 +223,109 @@ end
 
 local function createButton(text, callback)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 50)
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.Size = UDim2.new(1, 0, 0, 40)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     btn.Text = text
     btn.TextColor3 = Color3.new(1, 1, 1)
     btn.Font = Enum.Font.Gotham
-    btn.TextSize = 18
-    btn.Parent = content
+    btn.TextSize = 16
+    btn.Parent = ContentFrame
     btn.MouseButton1Click:Connect(callback)
     return btn
 end
 
--- === КНОПКИ ===
-createToggle("Infinite Health", false, function(v) InfiniteHealth = v end)
-createToggle("One Hit Kill", false, function(v) OneHitKill = v; if v then applyOneHitKill() end end)
-createToggle("Stealth (Invisible)", false, function(v) applyStealth(v) end)
-createToggle("Silent Walk", false, function(v) applySilentWalk(v) end)
-createToggle("Monster ESP", false, function(v) MonsterESP = v; updateESP() end)
-createToggle("Noclip", false, function(v) toggleNoclip(v) end)
-createButton("Rejoin Server", function()
-    game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+-- === ЭЛЕМЕНТЫ УПРАВЛЕНИЯ ===
+
+createToggle("Бессмертие", false, function(v) 
+    Settings.InfiniteHealth = v 
+    notify(v and "Бессмертие ВКЛ" or "Бессмертие ВЫКЛ")
 end)
 
--- === СВОРАЧИВАНИЕ GUI ===
-local collapsed = false
-collapseBtn.MouseButton1Click:Connect(function()
-    collapsed = not collapsed
-    local targetSize = collapsed and UDim2.new(0, 60, 0, 60) or UDim2.new(0, 380, 0, 580)
-    local tween = TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Size = targetSize})
-    tween:Play()
-
-    collapseBtn.Text = collapsed and "+" or "−"
-    content.Visible = not collapsed
-    title.Visible = not collapsed
-
-    -- Обновляем позицию кнопки после анимации
-    task.delay(0.3, updateCollapseBtnPosition)
+createToggle("1 Hit Kill", false, function(v) 
+    Settings.OneHitKill = v 
+    if v then refreshOHK() end
+    notify(v and "1 Hit Kill ВКЛ" or "1 Hit Kill ВЫКЛ")
 end)
 
--- Инициализация позиции кнопки
-task.spawn(updateCollapseBtnPosition)
+createButton("Получить 80 Монет", function()
+    setCoins(Settings.CoinsAmount)
+end)
 
--- === ПЕРЕТАСКИВАНИЕ (ТОЛЬКО ДЛЯ mainFrame) ===
+createButton("Респawn Игрока", function()
+    pcall(function() character:BreakJoints() end)
+end)
+
+createButton("Телепорт в Спавн", function()
+    if humanoidRootPart then
+        humanoidRootPart.CFrame = CFrame.new(0, 5, 0) -- Координаты спавна могут отличаться
+    end
+end)
+
+-- === ЛОГИКА СВОРАЧИВАНИЯ (FIX) ===
+MinimizeBtn.MouseButton1Click:Connect(function()
+    isGuiCollapsed = not isGuiCollapsed
+    
+    if isGuiCollapsed then
+        -- Сворачиваем
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
+            Size = UDim2.new(0, 350, 0, 40), -- Оставляем только заголовок
+            Position = UDim2.new(0.5, -175, MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset)
+        }):Play()
+        ContentFrame.Visible = false
+        MinimizeBtn.Text = "+"
+    else
+        -- Разворачиваем
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
+            Size = UDim2.new(0, 350, 0, 450),
+            Position = UDim2.new(0.5, -175, 0.5, -225)
+        }):Play()
+        ContentFrame.Visible = true
+        MinimizeBtn.Text = "-"
+    end
+end)
+
+-- === ИСПРАВЛЕНИЕ ДРАГ-СИСТЕМЫ (ANDROID + PC) ===
+-- Встроенная MainFrame.Draggable = true обычно работает лучше на Android, 
+-- но добавим ручную обработку для надежности с кнопкой сворачивания.
+
 local dragging = false
-local dragStart, startPos
-mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+local dragInput, dragStart, startPos
+
+local function update(input)
+    local delta = input.Position - dragStart
+    MainFrame.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        -- Не драгать, если нажали на кнопку сворачивания
+        if UserInputService:GetMouseLocation().X >= MainFrame.AbsolutePosition.X + MainFrame.AbsoluteSize.X - 35 then return end
+        
         dragging = true
         dragStart = input.Position
-        startPos = mainFrame.Position
+        startPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+MainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    if input == dragInput and dragging then
+        update(input)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-
-print("Darkteria Hub: ФИКС СВОРАЧИВАНИЯ ДЛЯ ANDROID — ЗАГРУЖЕНО!")
+notify("Darkteria Hub Загружен!")
