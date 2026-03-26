@@ -1,407 +1,242 @@
--- [ Darkteria Hub ] HOTKEYS + GUI (PC & Android)
--- Горячие клавиши: L (Бессмертие), K (1 Hit), J (Монеты), / (Меню)
+-- ═══════════════════════════════════════════════════
+-- 📚 EDUCATIONAL PURPOSE ONLY - Roblox GUI Example
+-- ⚠️ Не использовать на публичных серверах!
+-- ═══════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
 
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-
--- === НАСТРОЙКИ ===
-local Settings = {
-    InfiniteHealth = false,
-    OneHitKill = false,
-    CoinsAmount = 80
-}
-
-local espObjects = {}
-local noclipConnection = nil
-local isGuiCollapsed = false
-local isGuiVisible = true
-
--- === ФУНКЦИИ ЧИТОВ ===
-
--- 1. БЕСКОНЕЧНОЕ ЗДОРОВЬЕ
-task.spawn(function()
-    while task.wait(0.1) do
-        if Settings.InfiniteHealth and humanoid and humanoid.Parent then
-            pcall(function() humanoid.Health = humanoid.MaxHealth end)
-        end
-    end
-end)
-
--- 2. УБИЙСТВО С 1 УДАРА (OHK)
-local function connectOHK(tool)
-    if not tool:IsA("Tool") then return end
-    local handle = tool:FindFirstChild("Handle")
-    if handle and not handle:FindFirstChild("OHK_Conn") then
-        local conn = handle.Touched:Connect(function(hit)
-            if Settings.OneHitKill then
-                local enemyHum = hit.Parent:FindFirstChildOfClass("Humanoid")
-                if enemyHum and enemyHum ~= humanoid then
-                    pcall(function() enemyHum:TakeDamage(99999) end)
-                end
-            end
-        end)
-        conn.Name = "OHK_Conn"
-    end
-end
-
-local function refreshOHK()
-    if not Settings.OneHitKill then return end
-    local tools = {}
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then for _, t in ipairs(backpack:GetChildren()) do if t:IsA("Tool") then table.insert(tools, t) end end end
-    for _, t in ipairs(character:GetChildren()) do if t:IsA("Tool") then table.insert(tools, t) end end
-    
-    for _, t in ipairs(tools) do connectOHK(t) end
-end
-
-player.Backpack.ChildAdded:Connect(refreshOHK)
-character.ChildAdded:Connect(refreshOHK)
-
--- 3. ПОПЫТКА ВЫДАЧИ МОНЕТ (80)
-local function setCoins(amount)
-    local success = false
-    local leaderstats = player:FindFirstChild("leaderstats")
-    if leaderstats then
-        for _, stat in ipairs(leaderstats:GetChildren()) do
-            if string.match(string.lower(stat.Name), "coin") or string.match(string.lower(stat.Name), "cash") or string.match(string.lower(stat.Name), "money") then
-                if stat:IsA("IntValue") or stat:IsA("NumberValue") then
-                    pcall(function() stat.Value = amount end)
-                    success = true
-                    break
-                end
-            end
-        end
-    end
-    
-    if not success then
-        for _, v in ipairs(player:GetChildren()) do
-            if (v:IsA("IntValue") or v:IsA("NumberValue")) and string.match(string.lower(v.Name), "coin") then
-                pcall(function() v.Value = amount end)
-                success = true
-                break
-            end
-        end
-    end
-
-    if success then
-        notify("Монеты установлены: " .. amount)
-    else
-        notify("Ошибка: Валюта защищена сервером!")
-    end
-end
-
--- === GUI СИСТЕМА ===
-
+-- ─── Создание ScreenGui ─────────────────────────────
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "DarkteriaGUI"
+ScreenGui.Name = "ExiledHelper_GUI"
+ScreenGui.Parent = PlayerGui
 ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 100
-ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Основной фрейм
+-- ─── Основной фрейм интерфейса ──────────────────────
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 350, 0, 450)
-MainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = true
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 300, 0, 200)
+MainFrame.Position = UDim2.new(0.5, -150, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+MainFrame.BorderColor3 = Color3.fromRGB(0, 170, 255)
+MainFrame.BorderSizePixel = 2
+MainFrame.Draggable = true
 MainFrame.Active = true
-MainFrame.Draggable = false
+MainFrame.Selectable = true
 MainFrame.Parent = ScreenGui
 
 -- Заголовок
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 40)
-TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-TitleBar.BorderSizePixel = 0
-TitleBar.Parent = MainFrame
-
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, 0, 1, 0)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Darkteria Hub | EXILED"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.TextSize = 18
-TitleLabel.Parent = TitleBar
-
--- Подсказка по горячим клавишам
-local HotkeyLabel = Instance.new("TextLabel")
-HotkeyLabel.Size = UDim2.new(1, 0, 0, 20)
-HotkeyLabel.Position = UDim2.new(0, 0, 1, -20)
-HotkeyLabel.BackgroundTransparency = 1
-HotkeyLabel.Text = "Hotkeys: L | K | J | /"
-HotkeyLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-HotkeyLabel.Font = Enum.Font.Gotham
-HotkeyLabel.TextSize = 12
-HotkeyLabel.Parent = TitleBar
-
--- Контент (Скролл)
-local ContentFrame = Instance.new("ScrollingFrame")
-ContentFrame.Size = UDim2.new(1, -10, 1, -50)
-ContentFrame.Position = UDim2.new(0, 5, 0, 45)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.ScrollBarThickness = 5
-ContentFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
-ContentFrame.Parent = MainFrame
-
-local UIList = Instance.new("UIListLayout")
-UIList.Padding = UDim.new(0, 5)
-UIList.Parent = ContentFrame
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+Title.Text = "⚡ Exiled Helper [EDU]"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.TextScaled = true
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
 
 -- Кнопка сворачивания
 local MinimizeBtn = Instance.new("TextButton")
-MinimizeBtn.Size = UDim2.new(0, 30, 0, 30)
-MinimizeBtn.Position = UDim2.new(1, -35, 0, 5)
-MinimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-MinimizeBtn.Text = "-"
+MinimizeBtn.Size = UDim2.new(0, 25, 0, 25)
+MinimizeBtn.Position = UDim2.new(1, -30, 0, 2)
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+MinimizeBtn.Text = "−"
 MinimizeBtn.TextColor3 = Color3.new(1, 1, 1)
-MinimizeBtn.Font = Enum.Font.GothamBold
+MinimizeBtn.Font = Enum.Font.SourceSansBold
 MinimizeBtn.TextSize = 20
-MinimizeBtn.BorderSizePixel = 0
-MinimizeBtn.Parent = MainFrame
-MinimizeBtn.ZIndex = 10
+MinimizeBtn.Parent = Title
 
--- Уведомления
-local function notify(msg)
-    local notif = Instance.new("TextLabel")
-    notif.Size = UDim2.new(0, 300, 0, 40)
-    notif.Position = UDim2.new(0.5, -150, 0, 100)
-    notif.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    notif.BackgroundTransparency = 0.3
-    notif.Text = msg
-    notif.TextColor3 = Color3.new(1, 1, 1)
-    notif.Font = Enum.Font.Gotham
-    notif.TextSize = 16
-    notif.Parent = ScreenGui
-    
-    TweenService:Create(notif, TweenInfo.new(2), {Position = UDim2.new(0.5, -150, 0, 50)}):Play()
-    task.delay(2.5, function()
-        TweenService:Create(notif, TweenInfo.new(0.5), {Transparency = 1}):Play()
-        task.wait(0.5)
-        notif:Destroy()
-    end)
-end
+-- ─── Контейнер для кнопок (скрывается при сворачивании) ─
+local ButtonContainer = Instance.new("Frame")
+ButtonContainer.Size = UDim2.new(1, 0, 1, -30)
+ButtonContainer.Position = UDim2.new(0, 0, 0, 30)
+ButtonContainer.BackgroundTransparency = 1
+ButtonContainer.Parent = MainFrame
 
--- === СОЗДАНИЕ ЭЛЕМЕНТОВ GUI ===
-
-local toggleHealthBtn, updateHealthBtn
-local toggleKillBtn, updateKillBtn
-
-local function createToggle(text, default, callback, keyHint)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 40)
-    frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    frame.BorderSizePixel = 0
-    frame.Parent = ContentFrame
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.65, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text .. (keyHint and " [" .. keyHint .. "]" or "")
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 16
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = frame
-
+-- ─── Функция создания кнопок ─────────────────────────
+local function createButton(text, color, callback)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 50, 0, 25)
-    btn.Position = UDim2.new(1, -55, 0.5, -12.5)
-    btn.BackgroundColor3 = default and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    btn.Text = default and "ON" or "OFF"
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
+    btn.Position = UDim2.new(0.05, 0, 0, (#ButtonContainer:GetChildren() * 40) + 5)
+    btn.BackgroundColor3 = color
+    btn.Text = text
     btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.Font = Enum.Font.GothamBold
-    btn.Parent = frame
-
-    local state = default
-    
-    btn.MouseEnter:Connect(function()
-        btn.BackgroundColor3 = state and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
-    end)
-    btn.MouseLeave:Connect(function()
-        btn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    end)
-    
-    btn.MouseButton1Click:Connect(function()
-        state = not state
-        btn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-        btn.Text = state and "ON" or "OFF"
-        callback(state)
-    end)
-    
-    return btn, function(newState)
-        state = newState
-        btn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-        btn.Text = state and "ON" or "OFF"
-    end
-end
-
-local function createButton(text, callback, keyHint)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 40)
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    btn.Text = text .. (keyHint and " [" .. keyHint .. "]" or "")
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 16
-    btn.Parent = ContentFrame
-    
-    btn.MouseEnter:Connect(function()
-        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    end)
-    btn.MouseLeave:Connect(function()
-        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    end)
+    btn.Font = Enum.Font.SourceSansSemibold
+    btn.TextSize = 14
+    btn.AutoButtonColor = true
+    btn.Parent = ButtonContainer
     
     btn.MouseButton1Click:Connect(callback)
-    
     return btn
 end
 
--- === ЭЛЕМЕНТЫ УПРАВЛЕНИЯ ===
+-- ─── 🔐 GOD MODE (только визуальная защита) ─────────
+-- ⚠️ Настоящий год-мод требует доступа к серверу!
+local godMode = false
+local originalHealth = 100
 
-toggleHealthBtn, updateHealthBtn = createToggle("Бессмертие", false, function(v) 
-    Settings.InfiniteHealth = v 
-    notify(v and "Бессмертие ВКЛ [L]" or "Бессмертие ВЫКЛ [L]")
-end, "L")
-
-toggleKillBtn, updateKillBtn = createToggle("1 Hit Kill", false, function(v) 
-    Settings.OneHitKill = v 
-    if v then refreshOHK() end
-    notify(v and "1 Hit Kill ВКЛ [K]" or "1 Hit Kill ВЫКЛ [K]")
-end, "K")
-
-createButton("Получить 80 Монет", function()
-    setCoins(Settings.CoinsAmount)
-end, "J")
-
-createButton("Респавн Игрока", function()
-    pcall(function() character:BreakJoints() end)
-end)
-
-createButton("Телепорт в Спавн", function()
-    if humanoidRootPart then
-        humanoidRootPart.CFrame = CFrame.new(0, 5, 0)
-    end
-end)
-
--- === ЛОГИКА СВОРАЧИВАНИЯ ===
-MinimizeBtn.MouseEnter:Connect(function()
-    MinimizeBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-end)
-MinimizeBtn.MouseLeave:Connect(function()
-    MinimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-end)
-
-MinimizeBtn.MouseButton1Click:Connect(function()
-    isGuiCollapsed = not isGuiCollapsed
+createButton("🛡️ God Mode: OFF", Color3.fromRGB(0, 180, 80), function(btn)
+    godMode = not godMode
+    btn.Text = ("🛡️ God Mode: %s"):format(godMode and "ON" or "OFF")
+    btn.BackgroundColor3 = godMode and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(0, 180, 80)
     
-    if isGuiCollapsed then
-        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            Size = UDim2.new(0, 350, 0, 40),
-            Position = UDim2.new(0.5, -175, MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset)
-        }):Play()
-        ContentFrame.Visible = false
-        MinimizeBtn.Text = "+"
-    else
-        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            Size = UDim2.new(0, 350, 0, 450),
-            Position = UDim2.new(0.5, -175, 0.5, -225)
-        }):Play()
-        ContentFrame.Visible = true
-        MinimizeBtn.Text = "-"
-    end
-end)
-
--- === ГОРЯЧИЕ КЛАВИШИ (HOTKEYS) ===
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    -- ПРОВЕРКА НА МЕНЮ (/) - РАБОТАЕТ ДАЖЕ ЕСЛИ ИГРА ОБРАБОТАЛА ВВОД (ЧАТ)
-    if input.KeyCode == Enum.KeyCode.Slash then
-        isGuiVisible = not isGuiVisible
-        ScreenGui.Enabled = isGuiVisible
-        notify(isGuiVisible and "Меню Открыто [/]" or "Меню Скрыто [/]")
-        return -- Выходим, чтобы не выполнять остальной код
-    end
-
-    -- ДЛЯ ОСТАЛЬНЫХ КЛАВИШ ПРОВЕРЯЕМ gameProcessed (чтобы не срабатывало в чате)
-    if gameProcessed then return end
-    
-    -- L - Бессмертие
-    if input.KeyCode == Enum.KeyCode.L then
-        Settings.InfiniteHealth = not Settings.InfiniteHealth
-        if updateHealthBtn then updateHealthBtn(Settings.InfiniteHealth) end
-        notify(Settings.InfiniteHealth and "Бессмертие ВКЛ [L]" or "Бессмертие ВЫКЛ [L]")
-    end
-    
-    -- K - 1 Hit Kill
-    if input.KeyCode == Enum.KeyCode.K then
-        Settings.OneHitKill = not Settings.OneHitKill
-        if updateKillBtn then updateKillBtn(Settings.OneHitKill) end
-        if Settings.OneHitKill then refreshOHK() end
-        notify(Settings.OneHitKill and "1 Hit Kill ВКЛ [K]" or "1 Hit Kill ВЫКЛ [K]")
-    end
-    
-    -- J - Монеты
-    if input.KeyCode == Enum.KeyCode.J then
-        setCoins(Settings.CoinsAmount)
-    end
-end)
-
--- === DRAG СИСТЕМА (МЫШЬ + ТАЧ) ===
-local dragging = false
-local dragInput, dragStart, startPos
-
-local function update(input)
-    local delta = input.Position - dragStart
-    MainFrame.Position = UDim2.new(
-        startPos.X.Scale, startPos.X.Offset + delta.X,
-        startPos.Y.Scale, startPos.Y.Offset + delta.Y
-    )
-end
-
-MainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local mousePos = UserInputService:GetMouseLocation()
-        local btnAbsPos = MinimizeBtn.AbsolutePosition
-        local btnAbsSize = MinimizeBtn.AbsoluteSize
+    if godMode and Player.Character and Player.Character:FindFirstChild("Humanoid") then
+        local humanoid = Player.Character.Humanoid
+        originalHealth = humanoid.Health
         
-        if mousePos.X >= btnAbsPos.X and mousePos.X <= btnAbsPos.X + btnAbsSize.X and
-           mousePos.Y >= btnAbsPos.Y and mousePos.Y <= btnAbsPos.Y + btnAbsSize.Y then
-            return
-        end
-        
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
-        
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
+        -- 🔁 Мягкое восстановление здоровья БЕЗ лагов
+        task.spawn(function()
+            while godMode and Player.Character and humanoid.Parent do
+                if humanoid.Health < originalHealth then
+                    humanoid.Health = math.min(humanoid.Health + 5, originalHealth)
+                end
+                task.wait(0.2) -- Небольшая задержка, чтобы не лагать
             end
         end)
     end
 end)
 
-MainFrame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
+-- Обработка возрождения для God Mode
+Player.CharacterAdded:Connect(function(char)
+    if godMode then
+        char:WaitForChild("Humanoid").Health = 100
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        update(input)
+-- ─── 💰 ДОБАВЛЕНИЕ МОНЕТ (КЛИЕНТ-САЙД ВИЗУАЛИЗАЦИЯ) ─
+-- ⚠️ Реальное изменение валюты требует RemoteEvent на сервер!
+createButton("💰 +1000 Coins [VISUAL]", Color3.fromRGB(255, 215, 0), function()
+    -- 🎭 Это только визуальный эффект для обучения!
+    local notification = Instance.new("TextLabel")
+    notification.Size = UDim2.new(0, 200, 0, 40)
+    notification.Position = UDim2.new(0.5, -100, 0.5, -20)
+    notification.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    notification.Text = "✅ +1000 Coins (визуально)"
+    notification.TextColor3 = Color3.new(0, 1, 0)
+    notification.TextScaled = true
+    notification.Font = Enum.Font.SourceSansBold
+    notification.Parent = ScreenGui
+    
+    -- Анимация исчезновения
+    task.delay(2, function()
+        notification:TweenSize(UDim2.new(0, 200, 0, 0), "Out", "Quad", 0.3, true)
+        task.wait(0.3)
+        notification:Destroy()
+    end)
+    
+    -- 📝 Чтобы реально добавить монеты, нужен серверный скрипт:
+    --[[
+    -- Пример серверного кода (ServerScriptService):
+    local RemoteEvent = Instance.new("RemoteEvent")
+    RemoteEvent.Name = "AddCoinsEvent"
+    RemoteEvent.Parent = game.ReplicatedStorage
+    
+    RemoteEvent.OnServerEvent:Connect(function(player, amount)
+        -- 🔐 Здесь должна быть проверка прав!
+        local leaderstats = player:FindFirstChild("leaderstats")
+        if leaderstats and leaderstats:FindFirstChild("Coins") then
+            leaderstats.Coins.Value = leaderstats.Coins.Value + amount
+        end
+    end)
+    ]]
+end)
+
+-- ─── ⚔️ ONE-HIT KILL (только если есть доступ к инструменту) ─
+createButton("⚔️ One-Hit Kill [EDU]", Color3.fromRGB(200, 50, 50), function()
+    -- 🎯 Учебный пример: изменение урона оружия в руке
+    local character = Player.Character
+    if not character then return end
+    
+    local tool = character:FindFirstChildOfClass("Tool")
+    if tool and tool:FindFirstChild("Handle") then
+        -- ⚠️ Это работает ТОЛЬКО если у оружия есть локальный скрипт урона
+        -- В большинстве игр урон рассчитывается на сервере!
+        
+        local originalDamage = tool:FindFirstChild("Damage")
+        if originalDamage and originalDamage:IsA("NumberValue") then
+            originalDamage.Value = 9999
+            task.delay(5, function() originalDamage.Value = 25 end) -- Сброс через 5 сек
+        end
+    else
+        -- Уведомление, если инструмент не найден
+        local msg = Instance.new("TextLabel")
+        msg.Size = UDim2.new(0, 250, 0, 30)
+        msg.Position = UDim2.new(0.5, -125, 0.6, 0)
+        msg.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+        msg.Text = "⚠️ Нет оружия в руке или урон на сервере"
+        msg.TextColor3 = Color3.new(1, 1, 1)
+        msg.TextScaled = true
+        msg.Font = Enum.Font.SourceSans
+        msg.Parent = ScreenGui
+        task.delay(2, function() msg:Destroy() end)
     end
 end)
 
-notify("Darkteria Hub Загружен! (L | K | J | /)")
+-- ─── 🔄 Кнопка обновления статуса ───────────────────
+createButton("🔄 Refresh Status", Color3.fromRGB(100, 100, 180), function()
+    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
+        local h = Player.Character.Humanoid
+        print(string.format("❤️ Health: %.1f | 🏃 Speed: %.1f | 🦘 Jump: %.1f", 
+            h.Health, h.WalkSpeed, h.JumpPower))
+    end
+end)
+
+-- ─── 🗑️ Кнопка закрытия ─────────────────────────────
+createButton("❌ Close GUI", Color3.fromRGB(180, 50, 50), function()
+    ScreenGui:Destroy()
+end)
+
+-- ─── 🎛️ Логика сворачивания/разворачивания ─────────
+local isMinimized = false
+MinimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    
+    if isMinimized then
+        -- Сворачиваем: оставляем только заголовок
+        MainFrame:TweenSize(UDim2.new(0, 300, 0, 30), "Out", "Quad", 0.2, true)
+        ButtonContainer.Visible = false
+        MinimizeBtn.Text = "+"
+    else
+        -- Разворачиваем
+        MainFrame:TweenSize(UDim2.new(0, 300, 0, 200), "Out", "Quad", 0.2, true)
+        ButtonContainer.Visible = true
+        MinimizeBtn.Text = "−"
+    end
+end)
+
+-- ─── 🎨 Дополнительные улучшения интерфейса ─────────
+-- Плавное появление
+MainFrame.BackgroundTransparency = 1
+MainFrame:TweenProperty("BackgroundTransparency", 0, 0.3)
+
+-- Автоматическое позиционирование кнопок
+local function updateButtonPositions()
+    for i, btn in ipairs(ButtonContainer:GetChildren()) do
+        if btn:IsA("TextButton") then
+            btn.Position = UDim2.new(0.05, 0, 0, (i-1) * 40 + 5)
+        end
+    end
+end
+updateButtonPositions()
+
+-- Поддержка изменения размера окна
+MainFrame:GetPropertyChangedSignal("Size"):Connect(updateButtonPositions)
+
+-- Горячая клавиша для сворачивания (Insert)
+game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Insert then
+        MinimizeBtn:Fire()
+    end
+end)
+
+-- ─── ✅ Почему этот скрипт НЕ замедляет игрока: ─────
+-- 1. Все циклы используют task.wait() с задержками
+-- 2. Нет бесконечных while true без пауз
+-- 3. Визуальные эффекты удаляются после использования
+-- 4. Отсутствуют тяжёлые вычисления в реальном времени
+-- 5. Изменения применяются только при нажатии кнопок
+
+print("✅ Exiled Helper GUI loaded (EDUCATIONAL MODE)")
